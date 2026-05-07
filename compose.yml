@@ -1,0 +1,10 @@
+services:
+  app:
+    build:
+      dockerfile: _docker/app/Dockerfile
+      context: .
+    ports:
+      - "${PORT}:${PORT}"
+    volumes:
+      - ./_config:/app/_config
+    restart: unless-stopped

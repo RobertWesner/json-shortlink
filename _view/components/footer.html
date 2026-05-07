@@ -1,0 +1,10 @@
+{{ define "footer" }}
+    <footer>
+        {{ if .ImprintUrl }}
+            <a href="{{ .ImprintUrl }}">Imprint</a>
+        {{ end }}
+        {{ if .PrivacyPolicyUrl }}
+            <a href="{{ .PrivacyPolicyUrl }}">Privacy Policy</a>
+        {{ end }}
+    </footer>
+{{ end }}

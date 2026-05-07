@@ -1,48 +1,88 @@
 package main
 
 import (
-	"encoding/json"
+	"embed"
+	"html/template"
+	"io/fs"
+	"log/slog"
+	"net/http"
+	"os"
+	"sync"
+
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
-	"io"
-	"log"
-	"os"
 )
+
+//go:embed _view/*
+var viewsFS embed.FS
+
+//go:embed _public/*
+var publicFS embed.FS
 
 func main() {
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("dotenv load failed", "err", err)
+		os.Exit(1)
 	}
 
+	gin.SetMode(os.Getenv("GIN_MODE"))
 	r := gin.Default()
 
-	jsonFile, err := os.Open("links.json")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer func() {
-		_ = jsonFile.Close()
-	}()
+	tmpl := template.Must(template.ParseFS(viewsFS, "_view/*.html", "_view/components/*.html"))
+	r.SetHTMLTemplate(tmpl)
 
-	bytes, err := io.ReadAll(jsonFile)
+	publicSubFS, err := fs.Sub(publicFS, "_public")
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("_public sub failed", "err", err)
+		os.Exit(1)
+	}
+
+	tmplData := gin.H{
+		"ImprintUrl":       os.Getenv("IMPRINT_URL"),
+		"PrivacyPolicyUrl": os.Getenv("PRIVACY_POLICY_URL"),
 	}
 
 	links := map[string]string{}
-	err = json.Unmarshal(bytes, &links)
-	if err != nil {
-		log.Fatal(err)
+	lock := &sync.RWMutex{}
+
+	if err := refreshLinks(&links); err != nil {
+		slog.Error("initial links refresh failed", "err", err)
+		os.Exit(1)
 	}
 
-	for from, to := range links {
-		r.GET(from, func(c *gin.Context) {
-			c.Redirect(302, to)
-		})
-	}
+	go func() {
+		for {
+			if err := watchLinks(&links, lock); err != nil {
+				slog.Error("watch failed", "err", err)
+			}
+		}
+	}()
+
+	r.GET("/", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "index.html", tmplData)
+	})
+
+	r.StaticFS("/public/", http.FS(publicSubFS))
+
+	r.NoRoute(func(c *gin.Context) {
+		path := c.Request.URL.Path
+
+		lock.RLock()
+		target, ok := links[path]
+		lock.RUnlock()
+
+		if ok {
+			c.Redirect(http.StatusFound, target)
+
+			return
+		}
+
+		c.HTML(http.StatusNotFound, "404.html", tmplData)
+	})
 
 	if err := r.Run(); err != nil {
-		log.Fatalf("failed to run server: %v", err)
+		slog.Error("webserver run failed", "err", err)
+		os.Exit(1)
 	}
 }

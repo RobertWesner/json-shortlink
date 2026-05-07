@@ -1,0 +1,28 @@
+body {
+    font-family: sans-serif;
+
+    height: 100vh;
+
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: 2em;
+
+    background-color: #ebe8ee;
+}
+
+main, footer {
+    background-color: #edebef;
+    border-radius: 1rem;
+    padding: 2rem;
+    box-shadow: 0 0 10px 1px rgb(0 0 0 / 0.1);
+}
+
+footer {
+    display: flex;
+    gap: 1em;
+}
+
+footer:empty {
+    display: none;
+}
